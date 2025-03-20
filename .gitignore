@@ -1,0 +1,3 @@
+# Ignorer les fichiers générés par Cargo
+target/
+Cargo.lock
