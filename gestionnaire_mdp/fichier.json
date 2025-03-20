@@ -3,5 +3,15 @@
     "utilisateur": "mgt",
     "mdp": "mdp1234",
     "lien": "http://test.com"
+  },
+  {
+    "utilisateur": "mgt",
+    "mdp": "1234",
+    "lien": "ok"
+  },
+  {
+    "utilisateur": "mgt",
+    "mdp": "test",
+    "lien": "azerty"
   }
 ]

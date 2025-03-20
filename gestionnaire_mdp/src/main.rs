@@ -87,9 +87,9 @@ fn display_mdp() {
                 }
             };
 
-            println!("Liste des mots de passe enregistrés :\n");
-            for entree in entrees {
-                println!("Utilisateur : {}", entree.utilisateur);
+            println!("\nListe des mots de passe enregistrés :\n");
+            for (index, entree) in entrees.iter().enumerate() {
+                println!("\n[{}] Utilisateur : {}", index + 1, entree.utilisateur);
                 println!("Mot de passe : {}", entree.mdp);
                 println!("Lien : {}", entree.lien);
             }
@@ -100,23 +100,92 @@ fn display_mdp() {
     }
 }
 
+fn delete_mdp() {
+    let mut choix = String::new();
+
+    display_mdp();
+
+    println!("\nEntrez le **numéro** du mot de passe à supprimer : ");
+    io::stdin().read_line(&mut choix).expect("Erreur lors de la lecture de l'entrée");
+
+    let choix = choix.trim().parse::<usize>();
+
+    match choix {
+        Ok(index) => {
+            // Lire le fichier JSON
+            let mut fichier = match File::open(FICHIER_JSON) {
+                Ok(fichier) => fichier,
+                Err(_) => {
+                    println!("❌ Erreur : Aucun fichier de mots de passe trouvé.");
+                    return;
+                }
+            };
+
+            let mut contenu = String::new();
+            fichier.read_to_string(&mut contenu).expect("Erreur de lecture du fichier");
+
+            let mut entrees: Vec<Entry> = match serde_json::from_str(&contenu) {
+                Ok(data) => data,
+                Err(_) => {
+                    println!("Erreur : Format JSON invalide.");
+                    return;
+                }
+            };
+
+            // Vérifier si l’index existe
+            if index == 0 || index > entrees.len() {
+                println!("Erreur : Numéro invalide.");
+                return;
+            }
+
+            // Supprimer l’entrée sélectionnée
+            entrees.remove(index - 1);
+
+            // Écrire le fichier JSON mis à jour
+            let json_string = serde_json::to_string_pretty(&entrees).expect("Erreur de conversion en JSON");
+
+            let mut fichier = OpenOptions::new()
+                .write(true)
+                .truncate(true) // Efface le fichier existant
+                .open(FICHIER_JSON)
+                .expect("Erreur lors de l'ouverture du fichier");
+
+            fichier.write_all(json_string.as_bytes()).expect("Erreur lors de l'écriture dans le fichier");
+
+            println!("Mot de passe supprimé avec succès !");
+        }
+        Err(_) => {
+            println!("Erreur : Veuillez entrer un numéro valide !");
+        }
+    }
+}
+
 fn main() {
-    let mut option = String::new();
+    loop {
+        let mut option = String::new();
 
-    println!("Menu : \n1. Voir les mdp \n2. Enregistrer un mdp \n3. Supprimer un mdp \n\nChoisissez une option :");
+        println!("\n Menu :");
+        println!("1. Voir les mots de passe");
+        println!("2. Enregistrer un mot de passe");
+        println!("3. Supprimer un mot de passe");
+        println!("4. Quitter");
+        print!("Choisissez une option : ");
+        io::stdout().flush().unwrap();
 
-    io::stdin().read_line(&mut option)
-        .expect("Erreur lors de la lecture de l'entrée");
+        io::stdin().read_line(&mut option)
+            .expect("Erreur lors de la lecture de l'entrée");
 
-    let option = option.trim();
+        let option = option.trim(); 
 
-    if option == "1" {
-        display_mdp();
-    }
-    else if option == "2" {
-        save_mdp();
-    }
-    else if option == "3" {
-        println!("option 3");
+        match option {
+            "1" => display_mdp(),
+            "2" => save_mdp(),
+            "3" => delete_mdp(),
+            "4" | "quit" | "Quit" => {
+                println!("terminé");
+                break;
+            }
+            _ => println!(" Option invalide. Veuillez choisir une option valide."),
+        }
     }
 }
