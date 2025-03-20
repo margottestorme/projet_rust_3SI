@@ -1,4 +1,5 @@
-# projet_rust_3SI
+# développé par Margotte Storme et Ylian Bsila
+# projet_rust_3SI4
 
 Ce projet est un gestionnaire de mots de passe simple écrit en **Rust**.  
 Il permet d'ajouter et de récupérer des mots de passe stockés de manière sécurisée.
