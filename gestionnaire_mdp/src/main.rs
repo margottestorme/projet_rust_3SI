@@ -105,7 +105,7 @@ fn delete_mdp() {
 
     display_mdp();
 
-    println!("\nEntrez le **numéro** du mot de passe à supprimer : ");
+    println!("\nEntrez le numéro du mot de passe à supprimer : ");
     io::stdin().read_line(&mut choix).expect("Erreur lors de la lecture de l'entrée");
 
     let choix = choix.trim().parse::<usize>();
@@ -116,7 +116,7 @@ fn delete_mdp() {
             let mut fichier = match File::open(FICHIER_JSON) {
                 Ok(fichier) => fichier,
                 Err(_) => {
-                    println!("❌ Erreur : Aucun fichier de mots de passe trouvé.");
+                    println!("Erreur : Aucun fichier de mots de passe trouvé.");
                     return;
                 }
             };
@@ -182,7 +182,7 @@ fn main() {
             "2" => save_mdp(),
             "3" => delete_mdp(),
             "4" | "quit" | "Quit" => {
-                println!("terminé");
+                println!("au revoir");
                 break;
             }
             _ => println!(" Option invalide. Veuillez choisir une option valide."),
