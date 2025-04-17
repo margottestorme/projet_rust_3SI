@@ -1,16 +1,30 @@
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
-use ring::rand::{SecureRandom, SystemRandom};
+use ring::{pbkdf2, rand::{SecureRandom, SystemRandom}};
+use std::num::NonZeroU32;
 use base64::{engine::general_purpose, Engine as _};
 
 const NONCE_SIZE: usize = 12;
-const KEY_SIZE: usize = 32;
+const CREDENTIAL_LEN: usize = 32;
+const ITERATIONS: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(100_000) };
 
-/// Génère une clé AES-256 aléatoire
-pub fn generer_cle() -> [u8; KEY_SIZE] {
-    let mut cle = [0u8; KEY_SIZE];
-    SystemRandom::new().fill(&mut cle).unwrap();
-    cle
+pub fn generate_salt() -> [u8; 16] {
+    let mut salt = [0u8; 16];
+    SystemRandom::new().fill(&mut salt).unwrap();
+    salt
 }
+
+pub fn derive_key(password: &str, salt: &[u8]) -> [u8; CREDENTIAL_LEN] {
+    let mut key = [0u8; CREDENTIAL_LEN];
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        ITERATIONS,
+        salt,
+        password.as_bytes(),
+        &mut key,
+    );
+    key
+}
+
 
 /// Chiffre une donnée avec AES-256-GCM
 pub fn chiffrer_donnee(cle: &[u8], texte: &str) -> (String, String) {

@@ -1,22 +1,9 @@
 [
   {
     "utilisateur": "mgt",
-    "mdp": "mdp1234",
-    "lien": "http://test.com"
-  },
-  {
-    "utilisateur": "mgt",
-    "mdp": "1234",
-    "lien": "ok"
-  },
-  {
-    "utilisateur": "coucou",
-    "mdp": "test1234",
-    "lien": "www.google.com"
-  },
-  {
-    "utilisateur": "test_chiffrement",
-    "mdp": "utoxGNtHuf+u5FeFmV0ERg==",
-    "lien": "www.test.com"
+    "mdp": "HJVspN3Qg31AxgIdO9BKDlTjeRf3BDfL",
+    "lien": "google.com",
+    "nonce": "TBN7BBhQk/bnUywb",
+    "salt": "ZwYqg1mcmi5QWC1ECZ/IUw=="
   }
 ]
