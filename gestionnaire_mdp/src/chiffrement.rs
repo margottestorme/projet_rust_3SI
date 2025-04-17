@@ -1,191 +1,51 @@
-use std::fs::{OpenOptions, File};
-use std::io::{self, Write, Read};
-use serde::{Serialize, Deserialize};
-use serde_json;
+use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use ring::rand::{SecureRandom, SystemRandom};
+use base64::{engine::general_purpose, Engine as _};
 
-const FICHIER_JSON: &str = "./fichier.json";
+const NONCE_SIZE: usize = 12;
+const KEY_SIZE: usize = 32;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Entry {
-    utilisateur: String,
-    mdp: String,
-    lien: String,
+/// Génère une clé AES-256 aléatoire
+pub fn generer_cle() -> [u8; KEY_SIZE] {
+    let mut cle = [0u8; KEY_SIZE];
+    SystemRandom::new().fill(&mut cle).unwrap();
+    cle
 }
 
-fn save_mdp() {
-    println!("Enregistrement d'un mot de passe :\n");
+/// Chiffre une donnée avec AES-256-GCM
+pub fn chiffrer_donnee(cle: &[u8], texte: &str) -> (String, String) {
+    let mut nonce = [0u8; NONCE_SIZE];
+    SystemRandom::new().fill(&mut nonce).unwrap();
 
-    let mut utilisateur = String::new();
-    let mut mdp = String::new();
-    let mut lien = String::new();
+    let unbound_key = UnboundKey::new(&AES_256_GCM, cle).unwrap();
+    let cle = LessSafeKey::new(unbound_key);
 
-    println!("Nom d'utilisateur: ");
-    io::stdin().read_line(&mut utilisateur).expect("Erreur lors de la lecture de l'entrée");
+    let mut data = texte.as_bytes().to_vec();
+    let tag = cle
+        .seal_in_place_separate_tag(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::empty(),
+            &mut data,
+        )
+        .unwrap();
 
-    println!("Mot de passe: ");
-    io::stdin().read_line(&mut mdp).expect("Erreur lors de la lecture de l'entrée");
+    data.extend_from_slice(tag.as_ref());
 
-    println!("Lien: ");
-    io::stdin().read_line(&mut lien).expect("Erreur lors de la lecture de l'entrée");
+    let encrypted_data = general_purpose::STANDARD.encode(data);
+    let encoded_nonce = general_purpose::STANDARD.encode(nonce);
 
-    // créer une nouvelle entrée JSON
-    let nouvelle_entree = Entry {
-        utilisateur: utilisateur.trim().to_string(),
-        mdp: mdp.trim().to_string(),
-        lien: lien.trim().to_string(),
-    };
-
-    // lire les anciennes données du fichier JSON
-    let mut anciennes_donnees: Vec<Entry> = match File::open(FICHIER_JSON) {
-        Ok(mut fichier) => {
-            let mut contenu = String::new();
-            fichier.read_to_string(&mut contenu).unwrap_or(0);
-            serde_json::from_str(&contenu).unwrap_or_else(|_| Vec::new()) // retourne un tableau vide si y'a une erreur
-        }
-        Err(_) => Vec::new(), // tableau vide si le fichier n'existe pas
-    };
-
-    // ajout de la nouvelle entrée
-    anciennes_donnees.push(nouvelle_entree);
-
-    // conversion en JSON
-    let json_string = serde_json::to_string_pretty(&anciennes_donnees).expect("Erreur de conversion en JSON");
-
-    // sauvegarde dans le fichier
-    let mut fichier = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true) // Efface l'ancien contenu pour réécrire un JSON propre
-        .open(FICHIER_JSON)
-        .expect("Erreur lors de l'ouverture du fichier");
-
-    fichier.write_all(json_string.as_bytes()).expect("Erreur lors de l'écriture dans le fichier");
-
-    println!("Enregistrement fait avec succès !");
+    (encrypted_data, encoded_nonce)
 }
 
-fn display_mdp() {
-    // ouvrir le fichier en lecture seule
-    let fichier = File::open(FICHIER_JSON);
+pub fn dechiffrer_donnee(cle: &[u8], texte_chiffre: &str, nonce_str: &str) -> Option<String> {
+    let unbound_key = UnboundKey::new(&AES_256_GCM, cle).ok()?;
+    let cle = LessSafeKey::new(unbound_key);
 
-    match fichier {
-        Ok(mut fichier) => {
-            let mut contenu = String::new();
-            fichier.read_to_string(&mut contenu).expect("Erreur de lecture du fichier");
+    let nonce_bytes = general_purpose::STANDARD.decode(nonce_str).ok()?;
+    let nonce = Nonce::assume_unique_for_key(nonce_bytes.as_slice().try_into().ok()?);
 
-            if contenu.trim().is_empty() {
-                println!("Aucun mot de passe enregistré.");
-                return;
-            }
+    let mut donnees_chiffrees = general_purpose::STANDARD.decode(texte_chiffre).ok()?;
 
-            // Convertir le JSON en structure Rust
-            let entrees: Vec<Entry> = match serde_json::from_str(&contenu) {
-                Ok(data) => data,
-                Err(_) => {
-                    println!("Erreur de lecture du JSON.");
-                    return;
-                }
-            };
-
-            println!("\nListe des mots de passe enregistrés :\n");
-            for (index, entree) in entrees.iter().enumerate() {
-                println!("\n[{}] Utilisateur : {}", index + 1, entree.utilisateur);
-                println!("Mot de passe : {}", entree.mdp);
-                println!("Lien : {}", entree.lien);
-            }
-        }
-        Err(_) => {
-            println!("Aucun fichier trouvé. Aucun mot de passe enregistré.");
-        }
-    }
-}
-
-fn delete_mdp() {
-    let mut choix = String::new();
-
-    display_mdp();
-
-    println!("\nEntrez le numéro du mot de passe à supprimer : ");
-    io::stdin().read_line(&mut choix).expect("Erreur lors de la lecture de l'entrée");
-
-    let choix = choix.trim().parse::<usize>();
-
-    match choix {
-        Ok(index) => {
-            // Lire le fichier JSON
-            let mut fichier = match File::open(FICHIER_JSON) {
-                Ok(fichier) => fichier,
-                Err(_) => {
-                    println!("Erreur : Aucun fichier de mots de passe trouvé.");
-                    return;
-                }
-            };
-
-            let mut contenu = String::new();
-            fichier.read_to_string(&mut contenu).expect("Erreur de lecture du fichier");
-
-            let mut entrees: Vec<Entry> = match serde_json::from_str(&contenu) {
-                Ok(data) => data,
-                Err(_) => {
-                    println!("Erreur : Format JSON invalide.");
-                    return;
-                }
-            };
-
-            // Vérifier si l’index existe
-            if index == 0 || index > entrees.len() {
-                println!("Erreur : Numéro invalide.");
-                return;
-            }
-
-            // Supprimer l’entrée sélectionnée
-            entrees.remove(index - 1);
-
-            // Écrire le fichier JSON mis à jour
-            let json_string = serde_json::to_string_pretty(&entrees).expect("Erreur de conversion en JSON");
-
-            let mut fichier = OpenOptions::new()
-                .write(true)
-                .truncate(true) // Efface le fichier existant
-                .open(FICHIER_JSON)
-                .expect("Erreur lors de l'ouverture du fichier");
-
-            fichier.write_all(json_string.as_bytes()).expect("Erreur lors de l'écriture dans le fichier");
-
-            println!("Mot de passe supprimé avec succès !");
-        }
-        Err(_) => {
-            println!("Erreur : Veuillez entrer un numéro valide !");
-        }
-    }
-}
-
-fn main() {
-    loop {
-        let mut option = String::new();
-
-        println!("\n Menu :");
-        println!("1. Voir les mots de passe");
-        println!("2. Enregistrer un mot de passe");
-        println!("3. Supprimer un mot de passe");
-        println!("4. Quitter");
-        print!("Choisissez une option : ");
-        io::stdout().flush().unwrap();
-
-        io::stdin().read_line(&mut option)
-            .expect("Erreur lors de la lecture de l'entrée");
-
-        let option = option.trim(); 
-
-        match option {
-            "1" => display_mdp(),
-            "2" => save_mdp(),
-            "3" => delete_mdp(),
-            "4" | "quit" | "Quit" => {
-                println!("au revoir");
-                break;
-            }
-            _ => println!(" Option invalide. Veuillez choisir une option valide."),
-        }
-    }
+    let decrypted_data = cle.open_in_place(nonce, Aad::empty(), &mut donnees_chiffrees).ok()?;
+    Some(String::from_utf8_lossy(decrypted_data).to_string())
 }
