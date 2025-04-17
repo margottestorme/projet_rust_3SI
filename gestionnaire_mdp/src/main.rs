@@ -4,7 +4,8 @@ use serde::{Serialize, Deserialize};
 use serde_json;
 mod chiffrement;
 use chiffrement::*;
-
+use rpassword::read_password;
+use base64::{engine::general_purpose, Engine as _};
 
 const FICHIER_JSON: &str = "./fichier.json";
 
@@ -13,6 +14,8 @@ struct Entry {
     utilisateur: String,
     mdp: String,
     lien: String,
+    nonce: String,
+    salt: String,
 }
 
 fn save_mdp() {
@@ -21,8 +24,9 @@ fn save_mdp() {
     let mut utilisateur = String::new();
     let mut mdp = String::new();
     let mut lien = String::new();
-    let cle = generer_cle();
-    let (mdp_chiffre, nonce_str) = chiffrer_donnee(&cle, mdp.trim());
+
+    println!("Mot de passe maître : ");
+    let master_password = read_password().expect("Erreur de lecture");
 
     println!("Nom d'utilisateur: ");
     io::stdin().read_line(&mut utilisateur).expect("Erreur lors de la lecture de l'entrée");
@@ -33,11 +37,19 @@ fn save_mdp() {
     println!("Lien: ");
     io::stdin().read_line(&mut lien).expect("Erreur lors de la lecture de l'entrée");
 
+    let salt = generate_salt();
+    let cle = derive_key(&master_password, &salt);
+    let salt_str = general_purpose::STANDARD.encode(salt);
+
+    let (mdp_chiffre, nonce_str) = chiffrer_donnee(&cle, mdp.trim());
+
     // créer une nouvelle entrée JSON
     let nouvelle_entree = Entry {
         utilisateur: utilisateur.trim().to_string(),
         mdp: mdp_chiffre,
         lien: lien.trim().to_string(),
+        nonce: nonce_str,
+        salt: salt_str,
     };
 
     // lire les anciennes données du fichier JSON
@@ -92,10 +104,18 @@ fn display_mdp() {
                 }
             };
 
+            println!("Mot de passe maître : ");
+            let master_password = read_password().expect("Erreur lecture");
+
             println!("\nListe des mots de passe enregistrés :\n");
             for (index, entree) in entrees.iter().enumerate() {
+                let salt = general_purpose::STANDARD.decode(&entree.salt).expect("Erreur decode salt");
+                let cle = derive_key(&master_password, &salt);
+                let mdp_dechiffre = dechiffrer_donnee(&cle, &entree.mdp, &entree.nonce);
+
                 println!("\n[{}] Utilisateur : {}", index + 1, entree.utilisateur);
-                println!("Mot de passe : {}", entree.mdp);
+                //println!("Mot de passe : {}", entree.mdp);
+                println!("Mot de passe : {}", mdp_dechiffre.unwrap_or("Erreur déchiffrement".to_string()));
                 println!("Lien : {}", entree.lien);
             }
         }
