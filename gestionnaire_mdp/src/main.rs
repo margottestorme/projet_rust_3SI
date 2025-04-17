@@ -2,6 +2,9 @@ use std::fs::{OpenOptions, File};
 use std::io::{self, Write, Read};
 use serde::{Serialize, Deserialize};
 use serde_json;
+mod chiffrement;
+use chiffrement::*;
+
 
 const FICHIER_JSON: &str = "./fichier.json";
 
@@ -18,6 +21,8 @@ fn save_mdp() {
     let mut utilisateur = String::new();
     let mut mdp = String::new();
     let mut lien = String::new();
+    let cle = generer_cle();
+    let (mdp_chiffre, nonce_str) = chiffrer_donnee(&cle, mdp.trim());
 
     println!("Nom d'utilisateur: ");
     io::stdin().read_line(&mut utilisateur).expect("Erreur lors de la lecture de l'entrée");
@@ -31,7 +36,7 @@ fn save_mdp() {
     // créer une nouvelle entrée JSON
     let nouvelle_entree = Entry {
         utilisateur: utilisateur.trim().to_string(),
-        mdp: mdp.trim().to_string(),
+        mdp: mdp_chiffre,
         lien: lien.trim().to_string(),
     };
 
@@ -163,7 +168,6 @@ fn delete_mdp() {
 fn main() {
     loop {
         let mut option = String::new();
-
         println!("\n Menu :");
         println!("1. Voir les mots de passe");
         println!("2. Enregistrer un mot de passe");
