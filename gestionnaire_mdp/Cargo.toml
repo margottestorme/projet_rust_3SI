@@ -10,3 +10,4 @@ serde_json = "1.0"
 ring = "0.17.4"
 base64 = "0.21"
 rpassword = "7.0"
+winapi = { version = "0.3.9", features = ["winuser", "windef"] }
