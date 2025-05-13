@@ -21,6 +21,7 @@ struct Entry {
 
 pub struct MonApp {
     logged_in: bool,
+    message: String,
     username: String,
     password: String,
     site: String,
@@ -34,6 +35,7 @@ impl Default for MonApp {
     fn default() -> Self {
         MonApp {
             logged_in: false,
+            message: String::new(),
             username: String::new(),
             password: String::new(),
             site: String::new(),
@@ -147,10 +149,14 @@ impl eframe::App for MonApp {
                 if ui.button("Se connecter").clicked() {
                     if self.username == "admin" && self.password == "password" {
                         self.logged_in = true;
+                        self.message.clear();
                     } else {
-                        ui.label("Nom d'utilisateur ou mot de passe incorrect.");
+                        self.message = "Nom d'utilisateur ou mot de passe incorrect.".to_string();
                     }
                 }
+                if !self.message.is_empty() {
+                    ui.colored_label(egui::Color32::RED, &self.message);
+                }  
             }
         });
     }
