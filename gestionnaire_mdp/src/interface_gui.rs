@@ -1,13 +1,13 @@
-use eframe::egui;
 use crate::chiffrement::{chiffrer_donnee, dechiffrer_donnee, derive_key, generate_salt};
-use base64::engine::general_purpose;
 use base64::Engine;
+use base64::engine::general_purpose;
+use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read};
+use std::io::Read;
 
-const FICHIER_JSON: &str = "./fichier.json";
+const FICHIER_JSON: &str = "./passwords.json.enc";
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Entry {
@@ -156,7 +156,7 @@ impl eframe::App for MonApp {
                 }
                 if !self.message.is_empty() {
                     ui.colored_label(egui::Color32::RED, &self.message);
-                }  
+                }
             }
         });
     }
@@ -170,7 +170,8 @@ fn afficher_mdp() -> Result<Vec<Entry>, String> {
         .read_to_string(&mut contenu)
         .map_err(|_| "Erreur de lecture du fichier.")?;
 
-    let entrees: Vec<Entry> = serde_json::from_str(&contenu).map_err(|_| "Format JSON invalide.")?;
+    let entrees: Vec<Entry> =
+        serde_json::from_str(&contenu).map_err(|_| "Format JSON invalide.")?;
 
     Ok(entrees)
 }
