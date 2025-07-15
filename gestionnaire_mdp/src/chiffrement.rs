@@ -1,7 +1,10 @@
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
-use ring::{pbkdf2, rand::{SecureRandom, SystemRandom}};
+use base64::{Engine as _, engine::general_purpose};
+use ring::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
+use ring::{
+    pbkdf2,
+    rand::{SecureRandom, SystemRandom},
+};
 use std::num::NonZeroU32;
-use base64::{engine::general_purpose, Engine as _};
 
 const NONCE_SIZE: usize = 12;
 const CREDENTIAL_LEN: usize = 32;
@@ -25,7 +28,6 @@ pub fn derive_key(password: &str, salt: &[u8]) -> [u8; CREDENTIAL_LEN] {
     key
 }
 
-
 /// Chiffre une donnée avec AES-256-GCM
 pub fn chiffrer_donnee(cle: &[u8], texte: &str) -> (String, String) {
     let mut nonce = [0u8; NONCE_SIZE];
@@ -36,11 +38,7 @@ pub fn chiffrer_donnee(cle: &[u8], texte: &str) -> (String, String) {
 
     let mut data = texte.as_bytes().to_vec();
     let tag = cle
-        .seal_in_place_separate_tag(
-            Nonce::assume_unique_for_key(nonce),
-            Aad::empty(),
-            &mut data,
-        )
+        .seal_in_place_separate_tag(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut data)
         .unwrap();
 
     data.extend_from_slice(tag.as_ref());
@@ -60,6 +58,8 @@ pub fn dechiffrer_donnee(cle: &[u8], texte_chiffre: &str, nonce_str: &str) -> Op
 
     let mut donnees_chiffrees = general_purpose::STANDARD.decode(texte_chiffre).ok()?;
 
-    let decrypted_data = cle.open_in_place(nonce, Aad::empty(), &mut donnees_chiffrees).ok()?;
+    let decrypted_data = cle
+        .open_in_place(nonce, Aad::empty(), &mut donnees_chiffrees)
+        .ok()?;
     Some(String::from_utf8_lossy(decrypted_data).to_string())
 }

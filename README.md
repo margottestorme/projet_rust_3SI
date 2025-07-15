@@ -6,10 +6,11 @@ Il permet d'ajouter et de récupérer des mots de passe stockés de manière sé
 
 ## 🚀 Fonctionnalités
 - 🔒 Chiffrement des mots de passe avec **AES-256-GCM** (via la bibliothèque \`ring\`).
+- 🧂 Utilisation de sel et nonce aléatoires
 - 📂 Stockage des mots de passe sous forme de fichier JSON chiffré.
 - 🔑 Protection par mot de passe maître (implémentation future).
-- 🖥️ Interface CLI simple et intuitive.
-- 📝 Générateur de mots de passe (par la suite).
+- 🖥️ Interface graphique développée avec `eframe` / `egui`
+- 🧼 Code formaté avec `cargo fmt`
 
 ## 📦 Installation
 
@@ -48,4 +49,3 @@ Vous pourrez alors :
 ## 🛡️ Sécurité
 
 - **Les mots de passe sont stockés chiffrés avec AES-256-GCM**.
-- **Amélioration future** : utilisation d'Argon2 pour dériver une clé depuis un mot de passe maître/générateur de mots de passe.
