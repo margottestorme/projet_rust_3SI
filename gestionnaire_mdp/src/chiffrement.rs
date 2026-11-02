@@ -28,6 +28,63 @@ pub fn derive_key(password: &str, salt: &[u8]) -> [u8; CREDENTIAL_LEN] {
     key
 }
 
+/// Vérifie un mot de passe maître contre un hash et un sel stockés,
+/// sans jamais recomposer le hash attendu "à la main" (évite les failles de comparaison).
+pub fn verify_master_password(password: &str, salt: &[u8], expected_hash: &[u8]) -> bool {
+    pbkdf2::verify(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        ITERATIONS,
+        salt,
+        password.as_bytes(),
+        expected_hash,
+    )
+    .is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chiffrement_dechiffrement_round_trip() {
+        let salt = generate_salt();
+        let cle = derive_key("un_mot_de_passe_maitre", &salt);
+        let (donnee_chiffree, nonce) = chiffrer_donnee(&cle, "secret_a_proteger");
+
+        let resultat = dechiffrer_donnee(&cle, &donnee_chiffree, &nonce);
+
+        assert_eq!(resultat, Some("secret_a_proteger".to_string()));
+    }
+
+    #[test]
+    fn dechiffrement_echoue_avec_mauvaise_cle() {
+        let salt = generate_salt();
+        let bonne_cle = derive_key("mot_de_passe_correct", &salt);
+        let mauvaise_cle = derive_key("mot_de_passe_incorrect", &salt);
+
+        let (donnee_chiffree, nonce) = chiffrer_donnee(&bonne_cle, "secret_a_proteger");
+        let resultat = dechiffrer_donnee(&mauvaise_cle, &donnee_chiffree, &nonce);
+
+        assert_eq!(resultat, None);
+    }
+
+    #[test]
+    fn verification_mot_de_passe_maitre_correct() {
+        let salt = generate_salt();
+        let hash = derive_key("mot_de_passe_maitre", &salt);
+
+        assert!(verify_master_password("mot_de_passe_maitre", &salt, &hash));
+    }
+
+    #[test]
+    fn verification_mot_de_passe_maitre_incorrect() {
+        let salt = generate_salt();
+        let hash = derive_key("mot_de_passe_maitre", &salt);
+
+        assert!(!verify_master_password("mauvais_mot_de_passe", &salt, &hash));
+    }
+}
+
 /// Chiffre une donnée avec AES-256-GCM
 pub fn chiffrer_donnee(cle: &[u8], texte: &str) -> (String, String) {
     let mut nonce = [0u8; NONCE_SIZE];

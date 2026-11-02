@@ -1,4 +1,6 @@
-use crate::chiffrement::{chiffrer_donnee, dechiffrer_donnee, derive_key, generate_salt};
+use crate::chiffrement::{
+    chiffrer_donnee, dechiffrer_donnee, derive_key, generate_salt, verify_master_password,
+};
 use base64::Engine;
 use base64::engine::general_purpose;
 use eframe::egui;
@@ -8,6 +10,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Read;
 
 const FICHIER_JSON: &str = "./passwords.json.enc";
+const FICHIER_MASTER: &str = "./master.key";
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Entry {
@@ -19,11 +22,19 @@ struct Entry {
     salt: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct MasterRecord {
+    salt: String,
+    hash: String,
+}
+
 pub struct MonApp {
     logged_in: bool,
     message: String,
     username: String,
     password: String,
+    confirm_password: String,
+    master_password: String,
     site: String,
     lien: String,
     mot_de_passe: String,
@@ -38,6 +49,8 @@ impl Default for MonApp {
             message: String::new(),
             username: String::new(),
             password: String::new(),
+            confirm_password: String::new(),
+            master_password: String::new(),
             site: String::new(),
             lien: String::new(),
             mot_de_passe: String::new(),
@@ -74,7 +87,13 @@ impl eframe::App for MonApp {
                         if self.site.is_empty() || self.mot_de_passe.is_empty() || self.username.is_empty() {
                             ui.label("Erreur : Le site, le nom d'utilisateur et le mot de passe sont obligatoires.");
                         } else {
-                            if enregistrer_mdp(&self.site, &self.username, &self.lien, &self.mot_de_passe) {
+                            if enregistrer_mdp(
+                                &self.site,
+                                &self.username,
+                                &self.lien,
+                                &self.mot_de_passe,
+                                &self.master_password,
+                            ) {
                                 ui.label("Mot de passe enregistré avec succès !");
                                 self.site.clear();
                                 self.username.clear();
@@ -107,11 +126,10 @@ impl eframe::App for MonApp {
                                         *afficher = !*afficher;
                                     }
                                     if let Some(true) = self.afficher_mdp.get(&index) {
-                                        let master_password = "master_password";
                                         let salt = general_purpose::STANDARD
                                             .decode(&entry.salt)
                                             .expect("Erreur de décodage du salt");
-                                        let cle = derive_key(master_password, &salt);
+                                        let cle = derive_key(&self.master_password, &salt);
                                         let mdp_dechiffre = dechiffrer_donnee(
                                             &cle,
                                             &entry.mdp,
@@ -135,23 +153,51 @@ impl eframe::App for MonApp {
                         }
                     }
                 }
+            } else if !std::path::Path::new(FICHIER_MASTER).exists() {
+                // Première utilisation : création du mot de passe maître
+                ui.heading("Première utilisation — créer un mot de passe maître");
+                ui.horizontal(|ui| {
+                    ui.label("Mot de passe maître :");
+                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confirmer :");
+                    ui.add(egui::TextEdit::singleline(&mut self.confirm_password).password(true));
+                });
+                if ui.button("Créer").clicked() {
+                    if self.password.is_empty() {
+                        self.message = "Le mot de passe ne peut pas être vide.".to_string();
+                    } else if self.password != self.confirm_password {
+                        self.message = "Les mots de passe ne correspondent pas.".to_string();
+                    } else if enregistrer_master_password(&self.password) {
+                        self.master_password = self.password.clone();
+                        self.logged_in = true;
+                        self.message.clear();
+                        self.password.clear();
+                        self.confirm_password.clear();
+                    } else {
+                        self.message =
+                            "Erreur lors de la création du mot de passe maître.".to_string();
+                    }
+                }
+                if !self.message.is_empty() {
+                    ui.colored_label(egui::Color32::RED, &self.message);
+                }
             } else {
                 // Page de connexion
                 ui.heading("Connexion");
                 ui.horizontal(|ui| {
-                    ui.label("Nom d'utilisateur :");
-                    ui.text_edit_singleline(&mut self.username);
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Mot de passe :");
-                    ui.text_edit_singleline(&mut self.password);
+                    ui.label("Mot de passe maître :");
+                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
                 });
                 if ui.button("Se connecter").clicked() {
-                    if self.username == "admin" && self.password == "password" {
+                    if verifier_master_password(&self.password) {
+                        self.master_password = self.password.clone();
                         self.logged_in = true;
                         self.message.clear();
+                        self.password.clear();
                     } else {
-                        self.message = "Nom d'utilisateur ou mot de passe incorrect.".to_string();
+                        self.message = "Mot de passe maître incorrect.".to_string();
                     }
                 }
                 if !self.message.is_empty() {
@@ -176,9 +222,64 @@ fn afficher_mdp() -> Result<Vec<Entry>, String> {
     Ok(entrees)
 }
 
+// Crée le mot de passe maître (premier lancement) : stocke un sel + un hash PBKDF2,
+// jamais le mot de passe en clair.
+fn enregistrer_master_password(password: &str) -> bool {
+    let salt = generate_salt();
+    let hash = derive_key(password, &salt);
+    let record = MasterRecord {
+        salt: general_purpose::STANDARD.encode(salt),
+        hash: general_purpose::STANDARD.encode(hash),
+    };
+
+    match OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(FICHIER_MASTER)
+    {
+        Ok(mut fichier) => serde_json::to_writer_pretty(&mut fichier, &record).is_ok(),
+        Err(_) => false,
+    }
+}
+
+// Vérifie le mot de passe maître saisi contre le sel + hash stockés.
+fn verifier_master_password(password: &str) -> bool {
+    let mut fichier = match File::open(FICHIER_MASTER) {
+        Ok(fichier) => fichier,
+        Err(_) => return false,
+    };
+
+    let mut contenu = String::new();
+    if fichier.read_to_string(&mut contenu).is_err() {
+        return false;
+    }
+
+    let record: MasterRecord = match serde_json::from_str(&contenu) {
+        Ok(record) => record,
+        Err(_) => return false,
+    };
+
+    let salt = match general_purpose::STANDARD.decode(&record.salt) {
+        Ok(salt) => salt,
+        Err(_) => return false,
+    };
+    let hash = match general_purpose::STANDARD.decode(&record.hash) {
+        Ok(hash) => hash,
+        Err(_) => return false,
+    };
+
+    verify_master_password(password, &salt, &hash)
+}
+
 // Fonction pour enregistrer un mot de passe
-fn enregistrer_mdp(site: &str, username: &str, lien: &str, mot_de_passe: &str) -> bool {
-    let master_password = "master_password"; // a remplacer plus tard par une méthode + secu
+fn enregistrer_mdp(
+    site: &str,
+    username: &str,
+    lien: &str,
+    mot_de_passe: &str,
+    master_password: &str,
+) -> bool {
     let salt = generate_salt();
     let cle = derive_key(master_password, &salt);
     let salt_str = general_purpose::STANDARD.encode(salt);
